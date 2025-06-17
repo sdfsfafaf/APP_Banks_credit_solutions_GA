@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Веб-приложение Банка с ГА - Ввод</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .table-scroll {
+            max-height: 400px;
+            overflow-y: auto;
+            display: block;
+            border: 1px solid #ddd;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('input') }}">Ввод и визуализация</a></li>
+            <li><a href="{{ url_for('output') }}">Результаты</a></li>
+        </ul>
+    </nav>
+    <div class="content">
+        <h1>Загрузка данных клиентов и настройка параметров</h1>
+        {% if error %}
+        <p class="error">{{ error }}</p>
+        {% endif %}
+        <form method="POST" enctype="multipart/form-data">
+            <label for="file">Загрузить CSV-файл:</label>
+            <input type="file" name="file" required><br><br>
+
+            <h3>Параметры генетического алгоритма</h3>
+            <label>Размер популяции:</label>
+            <input type="number" name="pop_size" value="{{ defaults.pop_size }}"><br>
+            <label>Количество поколений:</label>
+            <input type="number" name="generation_size" value="{{ defaults.generation_size }}"><br>
+            <label>Вероятность кроссовера:</label>
+            <input type="number" step="0.01" name="p_xover" value="{{ defaults.p_xover }}"><br>
+            <label>Вероятность мутации:</label>
+            <input type="number" step="0.001" name="p_mutation" value="{{ defaults.p_mutation }}"><br>
+            <label>Коэффициент воспроизводства:</label>
+            <input type="number" step="0.001" name="reproduction_ratio" value="{{ defaults.reproduction_ratio }}"><br>
+            <label>Коэффициент резерва:</label>
+            <input type="number" step="0.01" name="bank_required_reserve_ratio" value="{{ defaults.bank_required_reserve_ratio }}"><br>
+            <label>Депозит:</label>
+            <input type="number" name="financial_institutions_deposit" value="{{ defaults.financial_institutions_deposit }}"><br>
+            <label>Ставка по депозиту:</label>
+            <input type="number" step="0.001" name="rD" value="{{ defaults.rD }}"><br>
+            <label>Количество элит:</label>
+            <input type="number" name="elite_count" value="{{ defaults.elite_count }}"><br>
+            <label>Институциональные затраты:</label>
+            <input type="number" step="0.001" name="bank_predetermined_institutional_cost" value="{{ defaults.bank_predetermined_institutional_cost }}"><br><br>
+
+            <input type="submit" value="Загрузить и просмотреть">
+        </form>
+        <form method="GET" action="{{ url_for('input') }}">
+            <input type="submit" value="Сбросить параметры">
+        </form>
+
+        {% if filter_stats %}
+        <h3>Статистика фильтрации</h3>
+        <ul>
+            <li>Всего записей: {{ filter_stats.total }}</li>
+            <li>Принято записей: {{ filter_stats.filtered }}</li>
+            <li>Отфильтровано из-за неверного типа кредита: {{ filter_stats.invalid_type }}</li>
+            <li>Отфильтровано из-за неверного кредитного рейтинга: {{ filter_stats.invalid_rating }}</li>
+            <li>Отфильтровано из-за отсутствующих значений: {{ filter_stats.missing_values }}</li>
+            <li>Отфильтровано из-за неверного возраста кредита: {{ filter_stats.invalid_age }}</li>
+            <li>Отфильтровано из-за нулевого/отрицательного размера кредита: {{ filter_stats.zero_loan }}</li>
+        </ul>
+        {% endif %}
+
+        {% if loan_types %}
+        <h3>Предпросмотр загруженных данных (типы кредитов)</h3>
+        <ul>
+            {% for type, count in loan_types.items() %}
+            <li>{{ type }}: {{ count }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if clients_table %}
+        <h3>Данные клиентов</h3>
+        {{ clients_table | safe }}
+        <form method="POST" action="{{ url_for('execute') }}" onsubmit="showLoading()">
+            <input type="submit" value="Запустить генетический алгоритм">
+        </form>
+        <div id="loading" style="display:none;">Загрузка...</div>
+        <script>
+            function showLoading() {
+                document.getElementById('loading').style.display = 'block';
+            }
+        </script>
+        {% endif %}
+    </div>
+</body>
+</html>

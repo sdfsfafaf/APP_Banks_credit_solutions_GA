@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Веб-приложение Банка с ГА - Результаты</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .table-scroll {
+            max-height: 400px;
+            overflow-y: auto;
+            display: block;
+            border: 1px solid #ddd;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .error {
+            color: red;
+        }
+        .plotly-graph-div {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('input') }}">Ввод и визуализация</a></li>
+            <li><a href="{{ url_for('output') }}">Результаты</a></li>
+        </ul>
+    </nav>
+    <div class="content">
+        <h1>Результаты генетического алгоритма</h1>
+        {% if error %}
+        <p class="error">{{ error }}</p>
+        {% else %}
+        <h2>Статистика выполнения</h2>
+        <p>Лучшая приспособленность: {{ results.best_fitness }}</p>
+        <p>Общий размер кредита: {{ results.total_loan_size }}</p>
+        <p>Ожидаемые потери: {{ results.expected_loss }}</p>
+        <p>Принятые клиенты: {{ results.accepted_customers }}</p>
+        <p>Время выполнения: {{ results.execution_time|round(2) }} секунд</p>
+
+        <h2>Статистика фильтрации</h2>
+        <ul>
+            <li>Всего записей: {{ results.filter_stats.total }}</li>
+            <li>Принято записей: {{ results.filter_stats.filtered }}</li>
+            <li>Отфильтровано из-за неверного типа кредита: {{ results.filter_stats.invalid_type }}</li>
+            <li>Отфильтровано из-за неверного кредитного рейтинга: {{ results.filter_stats.invalid_rating }}</li>
+            <li>Отфильтровано из-за отсутствующих значений: {{ results.filter_stats.missing_values }}</li>
+            <li>Отфильтровано из-за неверного возраста кредита: {{ results.filter_stats.invalid_age }}</li>
+            <li>Отфильтровано из-за нулевого/отрицательного размера кредита: {{ results.filter_stats.zero_loan }}</li>
+        </ul>
+
+        <h2>Принятые клиенты</h2>
+        {{ clients_table | safe }}
+
+        <h2>Визуализация</h2>
+        <h3>Распределение типов кредитов</h3>
+        {{ graphs.types | safe }}
+
+        <h3>Распределение кредитных рейтингов</h3>
+        {{ graphs.ratings | safe }}
+
+        <h3>Гистограмма возраста кредитов</h3>
+        {{ graphs.age | safe }}
+
+        <h3>Гистограмма размера кредитов</h3>
+        {{ graphs.size | safe }}
+
+        <h3>Гистограмма кредитных лимитов</h3>
+        {{ graphs.limit | safe }}
+
+        <h3>Конвергенция приспособленности</h3>
+        {{ graphs.fitness | safe }}
+
+        <a href="{{ url_for('download_results') }}">Скачать результаты в формате CSV</a>
+        <br><a href="{{ url_for('input') }}">Запустить снова</a>
+        {% endif %}
+    </div>
+</body>
+</html>
