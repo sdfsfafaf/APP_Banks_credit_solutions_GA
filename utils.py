@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import random
+import logging
 
 # Получение процентных ставок для кредитов
 def get_loan_interest_rate_vec(loan_types, loan_ages):
@@ -58,12 +59,10 @@ def calc_loan_revenue(df_customers: pd.DataFrame):
     r_L = get_loan_interest_rate_vec(df_customers['Loan Type'].values, df_customers['Loan Age'].values)  # Процентные ставки
     lambda_i = get_credit_landa_from_rating_vec(df_customers['Credit Rating'].values)  # Ожидаемые потери
     valid_mask = ~np.isnan(r_L) & ~np.isnan(lambda_i)  # Маска для валидных данных
-    return np.sum(df_customers['Loan Size'].values[valid_mask] * r_L[valid_mask] - lambda_i[valid_mask])  # Доход
-
-# Расчет затрат на кредиты
-def calc_loan_cost(df_customers: pd.DataFrame, bank_predetermined_institutional_cost):
-    """Рассчет затрат на кредиты."""
-    return np.sum(df_customers['Loan Size'].values * bank_predetermined_institutional_cost)  # Затраты
+    loan_sizes = df_customers['Loan Size'].values[valid_mask]
+    r_L = r_L[valid_mask]
+    lambda_i = lambda_i[valid_mask]
+    return np.sum(loan_sizes * r_L - lambda_i)  # Доход согласно статье: r_L * L - lambda
 
 # Расчет транзакционных издержек
 def calc_total_transaction_cost(df_customers: pd.DataFrame, bank_required_reserve_ratio, financial_institutions_deposit):
@@ -72,7 +71,7 @@ def calc_total_transaction_cost(df_customers: pd.DataFrame, bank_required_reserv
     K = bank_required_reserve_ratio  # Коэффициент резерва
     D = financial_institutions_deposit  # Депозиты
     T = (1 - K) * D - total_loan_size  # Транзакционные активы
-    r_T = 0.01  # Ставка транзакционных издержек
+    r_T = 0.01  # Фиксированная ставка транзакционных издержек
     return r_T * T if T >= 0 else 0  # Стоимость транзакций
 
 # Расчет стоимости депозитов
@@ -85,19 +84,18 @@ def calc_sum_of_landa(df_customers: pd.DataFrame):
     """Суммирование ожидаемых потерь."""
     lambda_i = get_credit_landa_from_rating_vec(df_customers['Credit Rating'].values)  # Ожидаемые потери
     valid_mask = ~np.isnan(lambda_i)  # Маска для валидных данных
-    return np.sum(lambda_i[valid_mask])  # Сумма потерь
+    return np.sum(df_customers['Loan Size'].values[valid_mask] * lambda_i[valid_mask])  # Сумма потерь
 
 # Вычисление фитнес-функции
 def calc_fitness(df_customers: pd.DataFrame, bank_required_reserve_ratio, financial_institutions_deposit, rD, bank_predetermined_institutional_cost):
-    """Фитнес-функция."""
+    """Фитнес-функция согласно статье."""
     if df_customers.empty:
         return 0
     v = calc_loan_revenue(df_customers)  # Доход от кредитов
     w_bar = calc_total_transaction_cost(df_customers, bank_required_reserve_ratio, financial_institutions_deposit)  # Транзакционные издержки
     beta = calc_cost_of_demand_deposit(rD, financial_institutions_deposit)  # Стоимость депозитов
     sum_of_landa = calc_sum_of_landa(df_customers)  # Ожидаемые потери
-    mue = calc_loan_cost(df_customers, bank_predetermined_institutional_cost)  # Затраты на кредиты
-    return v + w_bar - mue - beta - sum_of_landa  # Фитнес
+    return v + w_bar - beta - sum_of_landa  # Фитнес
 
 # Проверка ограничений GAMCC
 def is_GAMCC_satisfied_vec(chromo, df_customers, bank_required_reserve_ratio, financial_institutions_deposit):
@@ -155,32 +153,39 @@ def get_loan_age_category(loan_age):
 
 # Инициализация популяции
 def init_population_with_customers(df_customers, customer_size, population_size, bank_required_reserve_ratio, financial_institutions_deposit):
-    """Инициализация популяции с учетом GAMCC."""
-    chromos = []  # Список хромосом
-    max_loan_allowed = (1 - bank_required_reserve_ratio) * financial_institutions_deposit  # Максимальная сумма кредитов
-    loan_sizes = df_customers['Loan Size'].values  # Размеры кредитов
-    credit_limits = df_customers['Credit Limit'].values  # Кредитные лимиты
+    chromos = []
+    max_loan_allowed = (1 - bank_required_reserve_ratio) * financial_institutions_deposit
+    loan_sizes = df_customers['Loan Size'].values
+    credit_limits = df_customers['Credit Limit'].values
 
-    # Создание хромосом
+    logging.info(f"Starting population initialization: max_loan_allowed={max_loan_allowed}, population_size={population_size}")
+
     for _ in range(population_size):
-        chromo = np.zeros(customer_size, dtype=bool)  # Пустая хромосома
-        num_selected = np.random.randint(1, min(30, customer_size + 1))  # Количество выбираемых клиентов
-        indices = np.random.choice(range(customer_size), size=num_selected, replace=False)  # Индексы клиентов
-        total_loan = np.sum(loan_sizes[indices])  # Общий размер кредитов
-        attempts = 0  # Количество попыток
-        max_attempts = 100  # Максимум попыток
-        # Проверка ограничений
-        while (total_loan > max_loan_allowed or
-               np.any(loan_sizes[indices] > credit_limits[indices]) and
-               attempts < max_attempts):
-            num_selected = np.random.randint(1, min(30, customer_size + 1))
-            indices = np.random.choice(range(customer_size), size=num_selected, replace=False)
-            total_loan = np.sum(loan_sizes[indices])
-            attempts += 1
-        if attempts < max_attempts:
-            chromo[indices] = True
+        chromo = np.zeros(customer_size, dtype=bool)
+        current_loan = 0
+        available_indices = list(range(customer_size))
+        random.shuffle(available_indices)  # Перемешиваем для случайности
+
+        # Добавляем клиентов по одному, пока не исчерпаем лимит или индексы
+        while available_indices:
+            candidate_idx = available_indices.pop(0)
+            if loan_sizes[candidate_idx] <= credit_limits[candidate_idx] and current_loan + loan_sizes[candidate_idx] <= max_loan_allowed:
+                chromo[candidate_idx] = True
+                current_loan += loan_sizes[candidate_idx]
+
+        # Если хромосома валидна, добавляем её
+        if np.any(chromo):
             chromos.append(chromo)
-    return np.array(chromos) if chromos else np.array([])  # Массив хромосом
+            logging.info(f'Accepted chromosome with {np.sum(chromo)} clients')
+        else:
+            # Резервный вариант: добавляем одного случайного клиента
+            idx = random.choice(range(customer_size))
+            chromo[idx] = True
+            chromos.append(chromo)
+            logging.info(f'Accepted reserve chromosome with 1 client')
+
+    logging.info(f"Population initialization complete: {len(chromos)} chromosomes created")
+    return np.array(chromos)
 
 # Нормировка фитнес-вектора
 def get_rated_fit_vector(chromos_fitness_vector):
